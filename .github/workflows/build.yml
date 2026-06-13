@@ -1,0 +1,139 @@
+name: 构建 MAA 实例管理器
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths-ignore:
+      - "**/*.md"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "可选发布标签，例如 v0.1.0"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}${{ github.ref == 'refs/heads/main' && format('-{0}', github.sha) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    name: 计算版本信息
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.set_tag.outputs.tag }}
+      prerelease: ${{ steps.set_pre.outputs.prerelease }}
+      release_enabled: ${{ steps.set_tag.outputs.release_enabled }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          show-progress: false
+
+      - name: 设置标签
+        id: set_tag
+        env:
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            tag="${{ github.ref_name }}"
+            release_enabled=true
+          elif [[ -n "$INPUT_RELEASE_TAG" ]]; then
+            tag="$INPUT_RELEASE_TAG"
+            release_enabled=true
+          else
+            tag=$(git describe --tags --match "v*" HEAD 2>/dev/null || echo "v0.1.0-$(git rev-parse --short HEAD)")
+            release_enabled=false
+          fi
+          echo "tag=${tag}" | tee -a "$GITHUB_OUTPUT"
+          echo "release_enabled=${release_enabled}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: 判断预发布
+        id: set_pre
+        if: steps.set_tag.outputs.release_enabled == 'true'
+        run: |
+          if [[ '${{ steps.set_tag.outputs.tag }}' =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: 构建 Windows x64
+    needs: meta
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+        with:
+          show-progress: false
+
+      - name: 安装 .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: 还原依赖
+        run: dotnet restore MaaInstanceManager.csproj -p:Platform=x64
+
+      - name: 发布程序
+        run: >
+          dotnet publish MaaInstanceManager.csproj
+          -c Release
+          -p:Platform=x64
+          -r win-x64
+          --self-contained true
+          --no-restore
+          -o publish
+
+      - name: 打包产物
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Compress-Archive -Path publish\* -DestinationPath release\MAAInstanceManager-${{ needs.meta.outputs.tag }}-win-x64.zip
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: MAAInstanceManager-win-x64
+          path: release/MAAInstanceManager-*.zip
+
+  release:
+    name: 发布 Release 资产
+    if: needs.meta.outputs.release_enabled == 'true'
+    needs:
+      - meta
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v8
+        with:
+          path: assets
+
+      - name: 整理产物目录
+        run: |
+          cd assets
+          find . -mindepth 2 -type f -exec mv -t . {} +
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v3.0.0
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            assets/MAAInstanceManager-*.zip
+          prerelease: ${{ needs.meta.outputs.prerelease != 'false' }}

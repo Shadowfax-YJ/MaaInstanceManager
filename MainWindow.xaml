@@ -1,0 +1,358 @@
+<Window
+    x:Class="MaaInstanceManager.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="MAA 实例管理器"
+    Width="1240"
+    Height="780"
+    MinWidth="1100"
+    MinHeight="680"
+    WindowStartupLocation="CenterScreen">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border
+            Grid.Row="0"
+            Padding="16"
+            BorderBrush="#D6DADF"
+            BorderThickness="1"
+            CornerRadius="6">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="120" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="本体 Git 仓库" />
+                <TextBox
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Margin="0,0,12,10"
+                    Text="{Binding ReleaseRepositoryUrl, UpdateSourceTrigger=PropertyChanged}" />
+                <Button
+                    Grid.Row="0"
+                    Grid.Column="2"
+                    Margin="0,0,0,10"
+                    Click="RefreshReleaseVersionsButton_Click"
+                    Content="获取版本" />
+
+                <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="本体版本" />
+                <ComboBox
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Margin="0,0,12,10"
+                    IsEditable="False"
+                    ItemsSource="{Binding AvailableVersions}"
+                    SelectedItem="{Binding SelectedVersion, Mode=TwoWay}" />
+                <Button
+                    Grid.Row="1"
+                    Grid.Column="2"
+                    Margin="0,0,0,10"
+                    Click="DownloadSelectedReleaseButton_Click"
+                    Content="下载缓存" />
+
+                <TextBlock
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="Release 压缩包" />
+                <TextBox
+                    Grid.Row="2"
+                    Grid.Column="1"
+                    Margin="0,0,12,10"
+                    IsReadOnly="True"
+                    Text="{Binding ReleasePackagePath}" />
+                <Button
+                    Grid.Row="2"
+                    Grid.Column="2"
+                    Margin="0,0,0,10"
+                    Click="SelectReleasePackageButton_Click"
+                    Content="选择" />
+
+                <TextBlock
+                    Grid.Row="3"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="缓存目录" />
+                <TextBox
+                    Grid.Row="3"
+                    Grid.Column="1"
+                    Margin="0,0,12,10"
+                    Text="{Binding ReleaseCacheDirectory, UpdateSourceTrigger=PropertyChanged}" />
+                <Button
+                    Grid.Row="3"
+                    Grid.Column="2"
+                    Margin="0,0,0,10"
+                    Click="SelectReleaseCacheDirectoryButton_Click"
+                    Content="选择" />
+
+                <TextBlock
+                    Grid.Row="4"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="实例总目录" />
+                <TextBox
+                    Grid.Row="4"
+                    Grid.Column="1"
+                    Margin="0,0,12,10"
+                    Text="{Binding WorkspaceRoot, UpdateSourceTrigger=PropertyChanged}" />
+                <Button
+                    Grid.Row="4"
+                    Grid.Column="2"
+                    Margin="0,0,0,10"
+                    Click="SelectWorkspaceRootButton_Click"
+                    Content="选择" />
+
+                <TextBlock
+                    Grid.Row="5"
+                    Grid.Column="0"
+                    Margin="0,0,12,10"
+                    Text="实例命名" />
+                <WrapPanel
+                    Grid.Row="5"
+                    Grid.Column="1"
+                    Grid.ColumnSpan="2"
+                    Margin="0,0,0,10">
+                    <TextBlock Margin="0,0,8,0" Text="名称前缀" />
+                    <TextBox
+                        Width="110"
+                        Margin="0,0,18,0"
+                        Text="{Binding InstanceNamePrefix, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,0,8,0" Text="创建数量" />
+                    <TextBox
+                        Width="74"
+                        Margin="0,0,18,0"
+                        Text="{Binding NewInstanceCount, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,0,8,0" Text="复制数量" />
+                    <TextBox
+                        Width="74"
+                        Margin="0,0,18,0"
+                        Text="{Binding CloneCount, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,0,8,0" Text="目标分组" />
+                    <TextBox
+                        Width="120"
+                        Margin="0,0,18,0"
+                        Text="{Binding TargetGroup, UpdateSourceTrigger=PropertyChanged}" />
+                </WrapPanel>
+
+                <TextBlock
+                    Grid.Row="6"
+                    Grid.Column="0"
+                    Text="ADB 端口" />
+                <WrapPanel
+                    Grid.Row="6"
+                    Grid.Column="1"
+                    Grid.ColumnSpan="2">
+                    <TextBlock Margin="0,0,8,0" Text="起始端口" />
+                    <TextBox
+                        Width="92"
+                        Margin="0,0,18,0"
+                        Text="{Binding StartAdbPort, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,0,8,0" Text="步长" />
+                    <TextBox
+                        Width="74"
+                        Margin="0,0,18,0"
+                        Text="{Binding PortStep, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock
+                        Foreground="#697386"
+                        Text="端口按实例顺序从小到大分配，例如 16384, 16416, 16448 ..." />
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <WrapPanel
+            Grid.Row="1"
+            Margin="0,14,0,12">
+            <TextBlock
+                Margin="0,0,8,0"
+                Text="分组筛选" />
+            <ComboBox
+                Width="118"
+                Margin="0,0,12,0"
+                IsEditable="False"
+                ItemsSource="{Binding Groups}"
+                SelectedItem="{Binding SelectedGroupFilter, Mode=TwoWay}" />
+            <Button
+                Width="132"
+                Margin="0,0,10,0"
+                Click="CreateInstancesButton_Click"
+                Content="从 Release 创建" />
+            <Button
+                Width="132"
+                Margin="0,0,10,0"
+                Click="CloneSelectedButton_Click"
+                Content="复制选中实例" />
+            <Button
+                Width="112"
+                Margin="0,0,10,0"
+                Click="RemapPortsButton_Click"
+                Content="重映射端口" />
+            <Button
+                Width="86"
+                Margin="0,0,10,0"
+                Click="RefreshButton_Click"
+                Content="刷新" />
+            <Button
+                Width="86"
+                Margin="0,0,10,0"
+                Click="SelectAllButton_Click"
+                Content="全选" />
+            <Button
+                Width="98"
+                Margin="0,0,10,0"
+                Click="ClearSelectionButton_Click"
+                Content="清空选择" />
+            <Button
+                Width="98"
+                Margin="0,0,10,0"
+                Click="SetSelectedGroupButton_Click"
+                Content="设置分组" />
+            <Button
+                Width="98"
+                Margin="0,0,10,0"
+                Click="PackageSelectedButton_Click"
+                Content="打包选中" />
+            <Button
+                Width="98"
+                Margin="0,0,10,0"
+                Click="DeleteSelectedButton_Click"
+                Content="删除选中" />
+            <Button
+                Width="116"
+                Margin="0,0,10,0"
+                Click="OpenSelectedFolderButton_Click"
+                Content="打开实例目录" />
+            <Button
+                Width="116"
+                Click="OpenWorkspaceFolderButton_Click"
+                Content="打开总目录" />
+        </WrapPanel>
+
+        <DataGrid
+            Grid.Row="2"
+            AutoGenerateColumns="False"
+            CanUserAddRows="False"
+            CanUserDeleteRows="False"
+            HeadersVisibility="Column"
+            ItemsSource="{Binding Instances}"
+            SelectedItem="{Binding SelectedInstance, Mode=TwoWay}"
+            SelectionMode="Single">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn
+                    Width="58"
+                    Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    Header="选中" />
+                <DataGridTextColumn
+                    Width="120"
+                    Binding="{Binding Name}"
+                    Header="实例"
+                    IsReadOnly="True" />
+                <DataGridTextColumn
+                    Width="110"
+                    Binding="{Binding Group, UpdateSourceTrigger=PropertyChanged}"
+                    Header="分组" />
+                <DataGridTextColumn
+                    Width="150"
+                    Binding="{Binding ConnectAddress}"
+                    Header="ADB 地址"
+                    IsReadOnly="True" />
+                <DataGridTextColumn
+                    Width="90"
+                    Binding="{Binding StateText}"
+                    Header="状态"
+                    IsReadOnly="True" />
+                <DataGridTextColumn
+                    Width="80"
+                    Binding="{Binding ProcessId}"
+                    Header="PID"
+                    IsReadOnly="True" />
+                <DataGridTextColumn
+                    Width="2*"
+                    Binding="{Binding DirectoryPath}"
+                    Header="目录"
+                    IsReadOnly="True" />
+                <DataGridTextColumn
+                    Width="170"
+                    Binding="{Binding Status}"
+                    Header="结果"
+                    IsReadOnly="True" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                Grid.Column="0"
+                Margin="0,0,18,0"
+                Text="{Binding TotalCount, StringFormat=实例 {0}}" />
+            <TextBlock
+                Grid.Column="1"
+                Margin="0,0,18,0"
+                Text="{Binding SelectedCount, StringFormat=已选 {0}}" />
+            <TextBlock
+                Grid.Column="2"
+                Margin="0,0,18,0"
+                Text="{Binding RunningCount, StringFormat=运行 {0}}" />
+            <TextBlock
+                Grid.Column="3"
+                Text="{Binding StatusMessage}"
+                TextTrimming="CharacterEllipsis" />
+            <Button
+                Grid.Column="4"
+                Width="106"
+                Margin="10,0,0,0"
+                Click="StartSelectedButton_Click"
+                Content="启动选中" />
+            <Button
+                Grid.Column="5"
+                Width="106"
+                Margin="10,0,0,0"
+                Click="StopSelectedButton_Click"
+                Content="关闭选中" />
+            <Button
+                Grid.Column="6"
+                Width="106"
+                Margin="10,0,0,0"
+                Click="StartAllButton_Click"
+                Content="全部启动" />
+            <Button
+                Grid.Column="7"
+                Width="106"
+                Margin="10,0,0,0"
+                Click="StopAllButton_Click"
+                Content="全部关闭" />
+        </Grid>
+    </Grid>
+</Window>
