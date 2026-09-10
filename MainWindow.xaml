@@ -206,6 +206,16 @@
                 Click="CloneSelectedButton_Click"
                 Content="复制选中实例" />
             <Button
+                Width="132"
+                Margin="0,0,10,0"
+                Click="UpdateSelectedButton_Click"
+                Content="从包更新选中" />
+            <Button
+                Width="142"
+                Margin="0,0,10,0"
+                Click="UpdateBlackFlowButton_Click"
+                Content="更新采集版选中" />
+            <Button
                 Width="112"
                 Margin="0,0,10,0"
                 Click="RemapPortsButton_Click"

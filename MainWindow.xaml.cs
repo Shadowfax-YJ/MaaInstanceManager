@@ -267,6 +267,89 @@ public partial class MainWindow : INotifyPropertyChanged
         }));
     }
 
+    private async void UpdateSelectedButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ValidateReleasePackage())
+        {
+            return;
+        }
+
+        var targets = GetSelectedOrFocusedInstances().ToArray();
+        if (targets.Length == 0)
+        {
+            StatusMessage = "请选择需要更新的实例";
+            return;
+        }
+
+        await RunBusyAsync("正在准备安装包，实例配置和采集数据会保留...", () => UpdateInstancesAsync(targets, ReleasePackagePath));
+    }
+
+    private async void UpdateBlackFlowButton_Click(object sender, RoutedEventArgs e)
+    {
+        var targets = GetSelectedOrFocusedInstances().ToArray();
+        if (targets.Length == 0)
+        {
+            StatusMessage = "请选择需要更新的采集版实例";
+            return;
+        }
+
+        await RunBusyAsync("正在检查采集版更新...", async () => {
+            if (targets.Any(instance => !BlackFlowReleaseClient.IsBlackFlowInstance(instance.DirectoryPath)))
+            {
+                throw new InvalidOperationException("选中的实例中包含普通 MAA；请选择采集版实例");
+            }
+
+            var release = await BlackFlowReleaseClient.CheckAsync();
+            var pending = targets.Where(instance => BlackFlowReleaseClient.NeedsUpdate(instance.DirectoryPath, release.Version)).ToArray();
+            if (pending.Length == 0)
+            {
+                StatusMessage = "选中的采集版均已是最新版本 " + release.Version;
+                return;
+            }
+
+            StatusMessage = "正在下载 " + release.Version + "，多个实例共用一次下载...";
+            string package = await BlackFlowReleaseClient.DownloadAsync(release, ReleaseCacheDirectory);
+            BlackFlowReleaseClient.ValidateIdentity(package, release.Version);
+            ReleasePackagePath = package;
+            await UpdateInstancesAsync(pending, package);
+        });
+    }
+
+    private async Task UpdateInstancesAsync(ManagedInstance[] targets, string package)
+    {
+        int completed = 0;
+        int skipped = 0;
+        int failed = 0;
+        await Task.Run(() => {
+            using var installer = InstancePackageUpdater.Prepare(package, ReleaseCacheDirectory);
+            foreach (var instance in targets)
+            {
+                using var running = FindRunningProcess(instance);
+                if (running != null)
+                {
+                    skipped++;
+                    Dispatcher.Invoke(() => instance.Status = "正在运行，已跳过更新");
+                    continue;
+                }
+
+                try
+                {
+                    Dispatcher.Invoke(() => instance.Status = "正在更新，保留配置和数据");
+                    installer.Apply(instance.DirectoryPath);
+                    completed++;
+                    Dispatcher.Invoke(() => instance.Status = "更新完成，配置已保留");
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    Dispatcher.Invoke(() => instance.Status = ex.Message);
+                }
+            }
+        });
+        SaveState();
+        StatusMessage = $"更新完成 {completed} 个；运行中跳过 {skipped} 个；失败 {failed} 个。";
+    }
+
     private async void CloneSelectedButton_Click(object sender, RoutedEventArgs e)
     {
         if (!ValidateWorkspaceRoot())
@@ -1180,6 +1263,11 @@ public partial class MainWindow : INotifyPropertyChanged
             return;
         }
 
+        if (InstanceConfiguration.ApplyCurrentPort(instanceDirectory, adbPort))
+        {
+            return;
+        }
+
         var configDirectory = Path.Combine(instanceDirectory, "config");
         Directory.CreateDirectory(configDirectory);
         var configFile = Path.Combine(configDirectory, "gui.json");
@@ -1235,6 +1323,18 @@ public partial class MainWindow : INotifyPropertyChanged
     private static bool TryReadAdbPort(string instanceDirectory, out int port)
     {
         port = 0;
+        if (File.Exists(Path.Combine(instanceDirectory, "config", "gui.new.json")))
+        {
+            try
+            {
+                return InstanceConfiguration.TryReadCurrentPort(instanceDirectory, out port);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         var configFile = Path.Combine(instanceDirectory, "config", "gui.json");
         if (!File.Exists(configFile))
         {

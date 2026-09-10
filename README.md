@@ -7,6 +7,7 @@ MAA 实例管理器用于批量创建和维护多个 MAA 本体实例。它独�
 - 从本地 MAA Release 压缩包创建多个实例。
 - 从指定 Git 仓库读取本体版本标签，并从 GitHub Release 自动下载 Windows x64 压缩包到缓存目录。
 - 复制已配置好的实例，并自动分配 ADB 端口。
+- 在原目录更新选中实例，保留配置、端口和采集数据；支持自动下载最新采集版。
 - 按分组管理实例，支持分组筛选和批量设置分组。
 - 批量重映射 ADB 端口。
 - 启动、关闭、刷新和打开实例目录。
@@ -25,12 +26,26 @@ MAA 实例管理器用于批量创建和维护多个 MAA 本体实例。它独�
 
 如果自动下载不适用于目标仓库，也可以手动选择本地 Release zip 后创建实例。
 
+### 更新已有实例
+
+先停止需要更新的 MAA 实例，然后选中它们：
+
+- “从包更新选中”：使用已选择的完整 Windows Release ZIP，在原实例目录更新。
+- “更新采集版选中”：从黑流树海采集版独立渠道检查版本、下载并校验 SHA256，更新选中的采集版实例。相同版本跳过；旧版没有渠道标记时可自动接入。
+
+下载和解压各进行一次。运行中的实例跳过，不会强行结束。更新保留 `config`、`debug`、`data`、`reports`、`cache`、`achievement` 以及自定义背景；ADB 地址和任务列表不变。更新仅移除旧 `filelist.txt` 标记的过期程序文件，保留未被程序清单管理的用户文件。
+
+每次更新在实例目录生成 `.instance-update-*` 备份。安装异常时自动回滚；断电等进程外中断可根据其中的 `transaction.json` 和备份恢复。确认新版本正常后可以自行清理这些备份以释放空间。
+
+使用最新配置格式 `config/gui.new.json`，修改端口不会覆盖其他配置。采集版首建实例会先读取默认配置，再写入分配的端口。
+
 ## 本地构建
 
 需要 Windows 和 .NET 10 SDK。
 
 ```powershell
 dotnet restore .\MaaInstanceManager.csproj -p:Platform=x64
+dotnet run --project tests/UpdateTests.csproj -c Release
 dotnet publish .\MaaInstanceManager.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o publish
 ```
 
