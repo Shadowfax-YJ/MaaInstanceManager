@@ -55,6 +55,31 @@ try
     using (var zip = ZipFile.Open(traversal, ZipArchiveMode.Create)) zip.CreateEntry("../outside.txt");
     try { using var ignored = InstancePackageUpdater.Prepare(traversal, Path.Combine(root, "cache")); throw new Exception("traversal accepted"); }
     catch (InvalidDataException) { Check(!File.Exists(Path.Combine(root, "outside.txt")), "reject archive traversal"); }
+
+    if (args.Length == 1)
+    {
+        string realPackage = Path.GetFullPath(args[0]);
+        using var archive = ZipFile.OpenRead(realPackage);
+        using var identityStream = archive.GetEntry("blackflow-update.json")!.Open();
+        var identity = JsonNode.Parse(identityStream)!;
+        string version = identity["version"]!.GetValue<string>();
+        BlackFlowReleaseClient.ValidateIdentity(realPackage, version);
+        var release = BlackFlowReleaseClient.Parse(new JsonObject {
+            ["schema_version"] = 1, ["channel"] = "blackflow-data-collection", ["version"] = version,
+            ["assets"] = new JsonObject { ["win-x64"] = new JsonObject {
+                ["name"] = Path.GetFileName(realPackage), ["url"] = "https://example.com/fixture.zip",
+                ["size"] = new FileInfo(realPackage).Length,
+                ["sha256"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(realPackage))),
+            } },
+        }.ToJsonString());
+        Check(await BlackFlowReleaseClient.VerifyAsync(realPackage, release), "real package integrity and channel identity");
+        using var realInstaller = InstancePackageUpdater.Prepare(realPackage, Path.Combine(root, "real-cache"));
+        string instance = CreateInstance("real-package");
+        realInstaller.Apply(instance);
+        Check(Read(instance, "config/gui.new.json") == OriginalConfig && Read(instance, "debug/run.zip") == "original run", "real full package preserves existing configuration and data");
+        Check(BlackFlowReleaseClient.IsBlackFlowInstance(instance) && !BlackFlowReleaseClient.NeedsUpdate(instance, version), "updated instance joins channel and skips same version");
+        Check(File.Exists(Path.Combine(instance, "resource/template/Roguelike/BlackFlow/BlackFlow@Roguelike@SacrificePicker.png")), "real package installs current recognition resources");
+    }
     Console.WriteLine($"Passed {passed} instance update checks.");
 }
 finally { Directory.Delete(root, true); }
