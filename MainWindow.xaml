@@ -215,6 +215,13 @@
                 Margin="0,0,10,0"
                 Click="UpdateBlackFlowButton_Click"
                 Content="更新采集版选中" />
+            <ComboBox Width="178" Margin="0,0,10,0"
+                      ToolTip="采集版下载源"
+                      SelectedValue="{Binding BlackFlowSource, Mode=TwoWay}" SelectedValuePath="Tag">
+                <ComboBoxItem Content="自动（国内 CDN 优先）" Tag="Auto" />
+                <ComboBoxItem Content="国内 CDN" Tag="CDN" />
+                <ComboBoxItem Content="GitHub" Tag="GitHub" />
+            </ComboBox>
             <Button
                 Width="112"
                 Margin="0,0,10,0"

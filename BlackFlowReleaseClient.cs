@@ -9,14 +9,32 @@ namespace MaaInstanceManager;
 
 internal static class BlackFlowReleaseClient
 {
-    public const string FeedUrl = "https://github.com/Shadowfax-YJ/MaaAssistantArknights/releases/download/blackflow-updates/latest.json";
+    public const string CdnRoot = "https://img.lubiao.wiki/maa/blackflow";
+    public const string GitHubRoot = "https://github.com/Shadowfax-YJ/MaaAssistantArknights/releases/download";
+    public const string FeedUrl = CdnRoot + "/latest.json";
     private static readonly HttpClient Client = CreateClient();
 
     public sealed record Release(string Version, string Name, Uri Url, long Size, string Sha256);
 
-    public static async Task<Release> CheckAsync()
+    public static Uri[] SourceUrls(string cdn, string github, string source = "Auto") => source switch {
+        "CDN" => [new(cdn)],
+        "GitHub" => [new(github)],
+        _ => [new(cdn), new(github)],
+    };
+
+    public static async Task<Release> CheckAsync(string source = "Auto", Func<Uri, Task<string>>? fetch = null)
     {
-        return Parse(await Client.GetStringAsync(FeedUrl));
+        fetch ??= async url => {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            return await Client.GetStringAsync(url, timeout.Token);
+        };
+        var errors = new List<Exception>();
+        foreach (var url in SourceUrls(FeedUrl, GitHubRoot + "/blackflow-updates/latest.json", source))
+        {
+            try { return Parse(await fetch(url)); }
+            catch (Exception ex) { errors.Add(ex); }
+        }
+        throw new AggregateException("所选更新源均无法提供有效清单", errors);
     }
 
     public static Release Parse(string json)
@@ -48,7 +66,7 @@ internal static class BlackFlowReleaseClient
         return new(version, name, url, size, hash);
     }
 
-    public static async Task<string> DownloadAsync(Release release, string cacheDirectory)
+    public static async Task<string> DownloadAsync(Release release, string cacheDirectory, string source = "Auto", Func<Uri, string, Task>? download = null)
     {
         string directory = Path.Combine(cacheDirectory, "blackflow", release.Version);
         Directory.CreateDirectory(directory);
@@ -59,23 +77,26 @@ internal static class BlackFlowReleaseClient
         }
 
         string temporary = path + ".download";
+        download ??= DownloadFileAsync;
         try
         {
-            using var response = await Client.GetAsync(release.Url, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-            await using (var input = await response.Content.ReadAsStreamAsync())
-            await using (var output = File.Create(temporary))
+            var errors = new List<Exception>();
+            foreach (var url in SourceUrls($"{CdnRoot}/{release.Version}/{release.Name}",
+                         $"{GitHubRoot}/blackflow-{release.Version}/{release.Name}", source))
             {
-                await input.CopyToAsync(output);
+                try
+                {
+                    if (File.Exists(temporary)) File.Delete(temporary);
+                    await download(url, temporary);
+                    if (!await VerifyAsync(temporary, release))
+                        throw new InvalidDataException("下载文件大小或 SHA256 不一致");
+                    ValidateIdentity(temporary, release.Version);
+                    File.Move(temporary, path, overwrite: true);
+                    return path;
+                }
+                catch (Exception ex) { errors.Add(ex); }
             }
-
-            if (!await VerifyAsync(temporary, release))
-            {
-                throw new InvalidDataException("下载文件大小或 SHA256 不一致，未更新任何实例");
-            }
-
-            File.Move(temporary, path, overwrite: true);
-            return path;
+            throw new AggregateException("所选更新源均下载失败，未更新任何实例", errors);
         }
         finally
         {
@@ -84,6 +105,16 @@ internal static class BlackFlowReleaseClient
                 File.Delete(temporary);
             }
         }
+    }
+
+    private static async Task DownloadFileAsync(Uri url, string path)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(15));
+        using var response = await Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        response.EnsureSuccessStatusCode();
+        await using var input = await response.Content.ReadAsStreamAsync(timeout.Token);
+        await using var output = File.Create(path);
+        await input.CopyToAsync(output, timeout.Token);
     }
 
     public static async Task<bool> VerifyAsync(string path, Release release)

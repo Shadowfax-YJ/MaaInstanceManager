@@ -46,6 +46,13 @@ public partial class MainWindow : INotifyPropertyChanged
     private string _statusMessage = "就绪";
     private ManagedInstance? _selectedInstance;
     private bool _isBusy;
+    private string _blackFlowSource = "Auto";
+
+    public string BlackFlowSource
+    {
+        get => _blackFlowSource;
+        set { if (SetField(ref _blackFlowSource, value)) SaveState(); }
+    }
 
     public MainWindow()
     {
@@ -299,7 +306,8 @@ public partial class MainWindow : INotifyPropertyChanged
                 throw new InvalidOperationException("选中的实例中包含普通 MAA；请选择采集版实例");
             }
 
-            var release = await BlackFlowReleaseClient.CheckAsync();
+            string source = BlackFlowSource;
+            var release = await BlackFlowReleaseClient.CheckAsync(source);
             var pending = targets.Where(instance => BlackFlowReleaseClient.NeedsUpdate(instance.DirectoryPath, release.Version)).ToArray();
             if (pending.Length == 0)
             {
@@ -308,7 +316,7 @@ public partial class MainWindow : INotifyPropertyChanged
             }
 
             StatusMessage = "正在下载 " + release.Version + "，多个实例共用一次下载...";
-            string package = await BlackFlowReleaseClient.DownloadAsync(release, ReleaseCacheDirectory);
+            string package = await BlackFlowReleaseClient.DownloadAsync(release, ReleaseCacheDirectory, source);
             BlackFlowReleaseClient.ValidateIdentity(package, release.Version);
             ReleasePackagePath = package;
             await UpdateInstancesAsync(pending, package);
@@ -1086,6 +1094,7 @@ public partial class MainWindow : INotifyPropertyChanged
             _releaseRepositoryUrl = string.IsNullOrWhiteSpace(state.ReleaseRepositoryUrl) ? _releaseRepositoryUrl : state.ReleaseRepositoryUrl;
             _releaseCacheDirectory = string.IsNullOrWhiteSpace(state.ReleaseCacheDirectory) ? _releaseCacheDirectory : state.ReleaseCacheDirectory;
             _selectedVersion = state.SelectedVersion ?? string.Empty;
+            _blackFlowSource = state.BlackFlowSource is "CDN" or "GitHub" ? state.BlackFlowSource : "Auto";
             _releasePackagePath = state.ReleasePackagePath ?? string.Empty;
             _workspaceRoot = string.IsNullOrWhiteSpace(state.WorkspaceRoot) ? _workspaceRoot : state.WorkspaceRoot;
             _instanceNamePrefix = string.IsNullOrWhiteSpace(state.InstanceNamePrefix) ? _instanceNamePrefix : state.InstanceNamePrefix;
@@ -1128,6 +1137,7 @@ public partial class MainWindow : INotifyPropertyChanged
                 ReleaseRepositoryUrl = ReleaseRepositoryUrl,
                 ReleaseCacheDirectory = ReleaseCacheDirectory,
                 SelectedVersion = SelectedVersion,
+                BlackFlowSource = BlackFlowSource,
                 ReleasePackagePath = ReleasePackagePath,
                 WorkspaceRoot = WorkspaceRoot,
                 InstanceNamePrefix = InstanceNamePrefix,
@@ -1975,6 +1985,7 @@ public sealed class ManagedInstance : INotifyPropertyChanged
 
 public sealed class InstanceManagerState
 {
+    public string? BlackFlowSource { get; set; }
     public string? ReleaseRepositoryUrl { get; set; }
 
     public string? ReleaseCacheDirectory { get; set; }

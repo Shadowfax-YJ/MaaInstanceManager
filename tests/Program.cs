@@ -56,6 +56,37 @@ try
     try { using var ignored = InstancePackageUpdater.Prepare(traversal, Path.Combine(root, "cache")); throw new Exception("traversal accepted"); }
     catch (InvalidDataException) { Check(!File.Exists(Path.Combine(root, "outside.txt")), "reject archive traversal"); }
 
+    string mirrorZip = Path.Combine(root, "mirror.zip");
+    using (var zip = ZipFile.Open(mirrorZip, ZipArchiveMode.Create))
+    using (var writer = new StreamWriter(zip.CreateEntry("blackflow-update.json").Open()))
+        writer.Write("""{"schema_version":1,"channel":"blackflow-data-collection","version":"v1.2.3"}""");
+    byte[] mirrorBytes = File.ReadAllBytes(mirrorZip);
+    var mirrorRelease = new BlackFlowReleaseClient.Release("v1.2.3", "MAA-BlackFlow-Data-Collection-v1.2.3-win-x64.zip", new Uri("https://img.lubiao.wiki/fixture"), mirrorBytes.Length,
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(mirrorBytes)));
+    var requests = new List<Uri>();
+    string downloaded = await BlackFlowReleaseClient.DownloadAsync(mirrorRelease, Path.Combine(root, "mirror-cache"), download: async (url, path) => {
+        requests.Add(url);
+        await File.WriteAllBytesAsync(path, url.Host == "img.lubiao.wiki" ? new byte[mirrorBytes.Length] : mirrorBytes);
+    });
+    Check(requests.Select(x => x.Host).SequenceEqual(new[] { "img.lubiao.wiki", "github.com" }) && File.ReadAllBytes(downloaded).SequenceEqual(mirrorBytes), "CDN corrupt download falls back to verified GitHub bytes");
+    requests.Clear();
+    await BlackFlowReleaseClient.DownloadAsync(mirrorRelease, Path.Combine(root, "mirror-cache"), download: (url, path) => throw new Exception("valid cache should be reused"));
+    Check(true, "verified package cache avoids downloading again");
+    string mirrorManifest = System.Text.Json.JsonSerializer.Serialize(new {
+        schema_version = 1, channel = "blackflow-data-collection", version = mirrorRelease.Version,
+        assets = new Dictionary<string, object> { ["win-x64"] = new { name = mirrorRelease.Name, url = mirrorRelease.Url.ToString(), size = mirrorRelease.Size, sha256 = mirrorRelease.Sha256 } },
+    });
+    await BlackFlowReleaseClient.CheckAsync(fetch: url => {
+        requests.Add(url);
+        return url.Host == "img.lubiao.wiki" ? Task.FromException<string>(new HttpRequestException("403")) : Task.FromResult(mirrorManifest);
+    });
+    Check(requests.Count == 2 && requests[1].Host == "github.com", "CDN check failure switches to collection GitHub feed");
+    requests.Clear();
+    try {
+        await BlackFlowReleaseClient.CheckAsync("CDN", url => { requests.Add(url); throw new IOException("offline"); });
+        throw new Exception("offline feed accepted");
+    } catch (AggregateException) { Check(requests.Count == 1, "explicit source does not silently switch"); }
+
     if (args.Length == 1)
     {
         string realPackage = Path.GetFullPath(args[0]);
